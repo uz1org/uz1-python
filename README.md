@@ -1,4 +1,4 @@
-# UZ1
+# UZ1 - A New Lossless Compression Algorithm
 
 *By [Jace Voracek](http://www.uz1.org/)*
 
@@ -69,8 +69,10 @@ Licensed with a permissive MIT license. Feel free to directly use or create deri
 
 UZ1 is a personal hobby project that is gradually completed during my free time and will be lightly-maintained. If you think this is cool, feel free to donate! I completed my undergrad at Brigham Young University - Idaho about two years ago and am anticipating on beginning a graduate program next year, so funds will be set aside for education. If UZ1 is used in work by you or your team, I'd love to hear about it!
 
-PayPal: [Donate](https://www.paypal.com/donate?hosted_button_id=66X3KKMLU75WE)
-BTC: 3JoT7fXsNQi8Gub1wWdyos38M5R1q4prKG
+PayPal: [Donate](https://www.paypal.com/donate?hosted_button_id=66X3KKMLU75WE) 
+
+BTC: 3JoT7fXsNQi8Gub1wWdyos38M5R1q4prKG 
+
 ETH: 0x04C3Fc256CD4A2c22697C2152EAb277AeF1bBce4
 
 Thanks for trying out UZ1!

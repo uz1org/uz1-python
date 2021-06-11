@@ -22,7 +22,7 @@ def intro():
     print("===================================")
     print()
     print("UZ1 Lossless Compression (uz1.org) - by Jace Voracek")
-    print("v0.1 Early Access - May 2021")
+    print("v0.11 Early Access - June 2021")
     print()
     print("NOTICE: This Python implementation of UZ1 currently has poor performance. Expect >1hr durations for files >1GB.")
     print("There is no checksum integration. Please verify hashes after decompressing to ensure files matches originals.")
@@ -86,7 +86,10 @@ def main():
 
 #GLOBAL VARS (Lazy, I know)
 bitSize = 8
-my_dict = myDictOneLess = sorted_dict = copyOfDictOneLess = {}
+my_dict = {}
+myDictOneLess = {}
+sorted_dict = {}
+copyOfDictOneLess = {}
 segmentString = remainder = ""
 getLimitOneLess = ((2**(bitSize-1))-1)
 numOfBitsNeededToCompress = 32 #arbitrary
@@ -155,7 +158,7 @@ def fakeComp():
     remainder = remainder[(bitSize - 1):]
 
     if (writeFakeFlag == True):
-        segmentString = "0" + segmentString
+        segmentString = goBeforeNextSection + "0" + segmentString
         #This key is INVALID (rare)
     else:
         if (mustWriteZero == True):
@@ -707,7 +710,6 @@ def decompSectionCheckRequirements():
         return True
     else:
         return False
-
 
 
 def decompSection():

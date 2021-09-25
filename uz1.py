@@ -1,6 +1,6 @@
-#UZ1 Lossless Compression. "Unconventional ZIP" v0.1 Early Access. Authored by Jace Voracek. www.uz1.org
+#UZ1 Lossless Compression. "Unconventional ZIP" v0.90 Release Candidate. Authored by Jace Voracek. www.uz1.org
 
-#This script is highly unpolished. Senior devs will definitely be doing some of this: https://xkcd.com/1513/
+#This script is highly unpolished. Same energy: https://xkcd.com/1513/
 
 import os, binascii, operator, collections, sys
 from os import path
@@ -13,7 +13,7 @@ def intro():
     print()
     print("===================================")
     print()
-    print(" | | | |  |___ |  /^o^|")
+    print(" | | | |  |___ |  /   |")
     print(" | | | |    / /  /_/| |")
     print(" | | | |   / /      | |")
     print(" | \_/ |  / /___  __| |__")
@@ -22,48 +22,59 @@ def intro():
     print("===================================")
     print()
     print("UZ1 Lossless Compression (uz1.org) - by Jace Voracek")
-    print("v0.11 Early Access - June 2021")
+    print("v0.90 Release Candidate - Sep 2021")
     print()
-    print("NOTICE: This Python implementation of UZ1 currently has poor performance. Expect >1hr durations for files >1GB.")
-    print("There is no checksum integration. Please verify hashes after decompressing to ensure files matches originals.")
-    print("Files compressed with v0.1 may be incompatible with subsequent releases as the UZ1 specification is not yet published.")
+    print("NOTICE: The Python version of UZ1 currently has slow performance. Expect >1hr durations for files >1GB")
+    print("Suggestion: decompress files after compressing and verify checksum hashes match the original file.")
     print("No warranty is issued for the usage of this script. User assumes all risk.")
+    print()
     print()
 
 def printHelp():
     print("USAGE:")
     print()
     print("To compress: ")
-    print("python3 uz1.py compress yourFileNameHere")
+    print("python3 uz1.py compress fileNameHere")
     print()
     print("To decompress: ")
-    print("python3 uz1.py decompress yourFileNameHere.uz1")
+    print("python3 uz1.py decompress fileNameHere.uz1")
+    print()
+    print("Beta feature: Add 'max' as a third parameter to reiterate compression/decompression")
     print()
 
 def main():
     global arg2
     global outputFilename
+    global currentIteration
+    global doMaxIteration
+
+    currentIteration = 0
+    doMaxIteration = False
 
     intro()
     if int(sys.version[0]) < 3:
-        print("ERROR: Please upgrade to Python 3 or above in order to use UZ1. Exiting...")
+        print("ERROR: Please upgrade to Python 3 or a subsequent version in order to use UZ1. Exiting...")
     else:
         try:
-            arg1 = sys.argv[1]
+            arg1 = sys.argv[1] #Required: 'compress' or 'decompress'
         except:
             arg1 = ""
         try:
-            arg2 = sys.argv[2]
+            arg2 = sys.argv[2] #Required: Input filename
         except:
             arg2 = ""
         try:
-            arg3 = sys.argv[3]
+            arg3 = sys.argv[3] #Optional: 'max' to iterate the compression until file no longer shrinks, or decompress all iterations fully
         except:
             arg3 = ""
 
         if (arg1 == "compress"):
             if(arg2 is not None):
-                outputFilename = arg2 + ".uz1"
+                if (arg3 == "max"):
+                    outputFilename = arg2 + "." + str(currentIteration) + ".uz1"
+                    doMaxIteration = True
+                else:
+                    outputFilename = arg2 + ".uz1"
                 if (not path.exists(arg2)):
                     print("Error: Input filename " + arg2 + " does not exist. Exiting...")
                 elif (path.exists(outputFilename)):
@@ -71,20 +82,36 @@ def main():
                 elif(path.isdir(outputFilename)):
                     print("Directories are not supported. Exiting...")
                 else:
-                    compressMain(arg2)
+                    if (doMaxIteration == True):
+                        compressMax(arg2)
+                    else:
+                        compressMain(arg2)
             else:
                 printHelp()
         elif (arg1 == "decompress"):
             if(arg2 is not None):
-                outputFilename = arg2.split('.uz1')[0]
+                if (arg3 == "max"):
+                    outputFilename = arg2.split('.uz1')[0]
+                    currentIteration = int(outputFilename.split('.')[-1])
+                    currentIteration = currentIteration - 1
+                    if (currentIteration == -1):
+                        outputFilename = outputFilename.split('.')[0] + "." + outputFilename.split('.')[1]
+                    else:
+                        outputFilename = (outputFilename.split('.')[0] + "." + outputFilename.split('.')[1]) + "." + str(currentIteration) + ".uz1"
+                    doMaxIteration = True
+                else:
+                    outputFilename = arg2.split('.uz1')[0]
                 if (path.exists(outputFilename)):
                     print("Error: A file named " + outputFilename + " already exists. Exiting...")
                 else:
-                    decompressMain(arg2)
+                    if (doMaxIteration == True):
+                        decompressMax(arg2)
+                    else:
+                        decompressMain(arg2)
         else:
             printHelp()
 
-#GLOBAL VARS (Lazy, I know)
+#Common vars
 bitSize = 8
 my_dict = {}
 myDictOneLess = {}
@@ -95,10 +122,11 @@ getLimitOneLess = ((2**(bitSize-1))-1)
 numOfBitsNeededToCompress = 32 #arbitrary
 numOfChars = numOfLargestKey = 0
 writeFakeFlag = mustWriteZero = stillNeedBytes = False
-largestKey = unusedKeyOneLess = oppLargeKeyValue = oppLargeKey = goBeforeNextSection = ""
+largestKey = unusedKeyOneLess = oppLargeKeyValue = oppLargeKey = goBeforeNextSection = inputFileSize = ""
 dirtyRealBackup = "" #todo: clean
+alertedForUncompressedDataBlock = False
 
-#global vars used for decompression
+#Common vars for decompression
 decompLargeChar = getCurrentKey = decompAddAsRemainder = beginningOfSegment = isValidBit = backupSegmentString = unusedCharInBackup = ""
 amountBeforeReadingNextKey = numOfKeysFound = 0
 decompGetLimitOneLess = ((2**(bitSize-1))-0)
@@ -107,10 +135,11 @@ needBackup = alreadyMadeBackup = False
 
 
 def compressMain(arg2):
-    global remainder, stillNeedBytes
+    global remainder, stillNeedBytes, segmentString, inputFileSize, alertedForUncompressedDataBlock
 
     #open file here
     print("Now compressing: " + arg2)
+    inputFileSize = getFileSize(arg2)
     with open(arg2, 'rb') as f:
         #Read file as hex 16 bytes at a time
         entry = (str(binascii.hexlify(f.read(16))))[2:-1]
@@ -133,6 +162,16 @@ def compressMain(arg2):
                     #3. Process binary until segment is full
                     processBinary(binaryString)
 
+                    #Alert user if large chunck of uncompressed data is detected. UZ1 works best with frequent permutations of the bitSize.
+                    if (alertedForUncompressedDataBlock == False):
+                        if (len(segmentString) > (getLimitOneLess * bitSize) * 1000):
+                            print()
+                            print("Large chunk of uncompressed data detected... Processing this file will proably take a while.")
+                            print("Pro tip: Compress large volumes of uncompressed data with another algorithm before using UZ1.")
+                            print()
+                            print("Still compressing...")
+                            alertedForUncompressedDataBlock = True
+
                 #Determine if the current segment is done
                 if (isSegmentFinished() is True):
                     processFinishedSegment()
@@ -141,10 +180,82 @@ def compressMain(arg2):
             entry = (str(binascii.hexlify(f.read(16))))[2:-1]
 
     #Is there still unprocessed data? End of file?
-    if (len(segmentString) > 0):
+    if ((len(segmentString)) or (len(remainder)) > 0):
         #There's still data to process
         comp_processEndOfFileUnfinished()
     print("Finished! :-)")
+    sizeDiff = int(inputFileSize) - int(getFileSize(outputFilename))
+    if (sizeDiff >= 0):
+        print("Output is " + getFileSize(outputFilename) + " bytes. Saved " + str(sizeDiff) + " bytes from original.")
+    else:
+        print("Output is " + getFileSize(outputFilename) + " bytes. Grew " + str(sizeDiff) + " bytes from original.")
+    print()
+
+
+def compressMax(arg2):
+    global inputFileSize, outputFilename, currentIteration, segmentString, remainder, my_dict, myDictOneLess
+
+    compressMain(arg2)
+    sizeDiff = int(inputFileSize) - int(getFileSize(outputFilename))
+
+    while(sizeDiff >= 0):
+        currentIteration = currentIteration + 1
+        previousFile = outputFilename
+        outputFilename = arg2 + "." + str(currentIteration) + ".uz1"
+
+        #reset some vars
+        segmentString = ""
+        remainder = ""
+        my_dict = {}
+        myDictOneLess = {}
+
+        compressMain(previousFile)
+        sizeDiff = int(inputFileSize) - int(getFileSize(outputFilename))
+        if (sizeDiff >= 0):
+            os.remove(previousFile)
+        else:
+            os.remove(outputFilename)
+            print("UZ1 compression maxed out. Last iteration had better results. Keeping: " + previousFile)
+    print("Totally done! :)")
+
+
+def decompResetVars():
+    global my_dict,myDictOneLess,segmentString,numOfChars,numOfLargestKey,largestKey,decompLargeChar,getCurrentKey,decompAddAsRemainder,beginningOfSegment,unusedCharInBackup,binaryString
+    global amountBeforeReadingNextKey, justStarted
+    my_dict = {}
+    myDictOneLess = {}
+    segmentString = ""
+    numOfChars = 0
+    numOfLargestKey = 0
+    largestKey = ""
+    decompLargeChar = ""
+    getCurrentKey = ""
+    decompAddAsRemainder = ""
+    beginningOfSegment = ""
+    unusedCharInBackup = ""
+    binaryString = ""
+    amountBeforeReadingNextKey = 0
+    justStarted = 1
+
+
+def decompressMax(arg2):
+    global inputFileSize, outputFilename, currentIteration, segmentString, remainder, my_dict, myDictOneLess, justStarted, binaryString
+
+    decompressMain(arg2)
+    while(currentIteration >= 0):
+        decompResetVars()
+        currentIteration = currentIteration - 1
+        previousFile = outputFilename
+        print("currentIteration: " + str(currentIteration))
+        print("previousFile: " + previousFile)
+        if (currentIteration == -1):
+            outputFilename = outputFilename.split('.')[0] + "." + outputFilename.split('.')[1]
+        else:
+            outputFilename = outputFilename.split('.')[0] + "." + outputFilename.split('.')[1] + "." + str(currentIteration) + ".uz1"
+        decompressMain(previousFile)
+        os.remove(previousFile)
+    print("Totally done! :)")
+
 
 def fakeComp():
     global segmentString, remainder, largestKey, goBeforeNextSection, writeFakeFlag, mustWriteZero, dirtyRealBackup
@@ -178,12 +289,13 @@ def fakeComp():
             remainder = remainder[1:]
             segmentString = goBeforeNextSection + getBitFromRemainder + segmentString
 
+
 def getValuesForComp():
     global segmentString, numOfLargestKey, largestKey, goBeforeNextSection, dirtyRealBackup
+    #temp
+    global myDictOneLess
     bitsToProcess = ""
     numOfBitSizeRemaining = bitSize
-
-    #print("Debug: number of chars in segment: " + str(debugCheckNumOfDictItemsInSegment(segmentString)))
     #todo: this is dirty
     dirtyRealBackup = segmentString
 
@@ -195,10 +307,8 @@ def getValuesForComp():
             fakeComp()
     else:
         fakeComp()
-
     goBeforeNextSection = ""
     finishSegment()
-
 
 
 def determineIfFakeFlagNeeded(keyToCheck):
@@ -249,7 +359,6 @@ def processFinishedSegment():
     writeFakeFlag = False
 
 
-
 def checkNumOfTimesKeyInSegment(segmentToCheck, keyToCheck):
     tempNumOfKeysFound = 0
     for i in range(0, len(segmentToCheck), bitSize):
@@ -257,6 +366,7 @@ def checkNumOfTimesKeyInSegment(segmentToCheck, keyToCheck):
         if (key[:-1] == (keyToCheck)):
             tempNumOfKeysFound += 1
     return tempNumOfKeysFound
+
 
 def debugCheckNumOfDictItemsInSegment(segmentToCheck):
     tempDictOneLess = {}
@@ -270,7 +380,6 @@ def debugCheckNumOfDictItemsInSegment(segmentToCheck):
         else:
             tempDictOneLess[key] = 1
     return len(tempDictOneLess.items())
-
 
 
 def testBeforeRealComp():
@@ -331,7 +440,6 @@ def testBeforeRealComp():
     return canCompress
 
 
-
 def getOppOfChar(charToCheck):
     if (charToCheck[-1:] == "1"):
         oppChar = charToCheck[:-1] + "0"
@@ -340,14 +448,12 @@ def getOppOfChar(charToCheck):
     return oppChar
 
 
-
 def realComp():
     global segmentString, remainder, largestKey, unusedKeyOneLess, goBeforeNextSection
     bitsToProcess = ""
     numOfBitSizeRemaining = bitSize
 
-    #todo: see if the following can be achieved without breaking fakeKey during decompress
-    #saves one bit if opp of largest key exists
+    #todo: see if the following can be achieved without breaking fakeKey during decompress. saves one bit if opp of largest key exists
     # if (str(my_dict.get(str(getOppOfChar(largestKey)))) != "None"):
     # numOfBitSizeRemaining -= 1
     # print("realComp: opp of key exists")
@@ -365,12 +471,12 @@ def realComp():
                 numProcessed += 1
                 currChar = unusedKeyOneLess + currBin
                 segmentString = segmentString[:i] + currChar + segmentString[i+bitSize:]
-
     #Write key to beginning.
     segmentString = goBeforeNextSection + unusedKeyOneLess + segmentString
     #We are confident that this is correct, so add 1.
     segmentString = "1" + segmentString
     #This key is VALID
+
 
 def finishSegment():
     global segmentString, remainder, goBeforeNextSection
@@ -382,11 +488,8 @@ def finishSegment():
         goBeforeNextSection = binaryToWrite[-getRemainder:]
         binaryToWrite = binaryToWrite[:-getRemainder]
 
-    #Write file
-    with open(outputFilename, "ab") as myfile:
-        myfile.write(binascii.unhexlify(bin2hex(binaryToWrite)))
+    writeToFile(binascii.unhexlify(bin2hex(binaryToWrite)))
     segmentString = ""
-
 
 
 def checkUnusedChar(sorted_dict):
@@ -398,6 +501,7 @@ def checkUnusedChar(sorted_dict):
             valueToCheck = valueToCheck + "1"
         if (str(sorted_dict.get(str(valueToCheck))) == "None"):
             return valueToCheck
+
 
 def processRemainder():
     global remainder, segmentString
@@ -414,6 +518,15 @@ def processRemainder():
                 segmentString += remainder[0:bitSize]
                 remainder = remainder[bitSize:]
 
+
+def comp_processEndOfFileUnfinished():
+    global segmentString, remainder, goBeforeNextSection
+
+    segmentString = goBeforeNextSection + segmentString + remainder
+    #print("endOfFile segmentString: " + segmentString)
+    while (len(segmentString) % 8 != 0):
+        segmentString += "0"
+    writeToFile(binascii.unhexlify(bin2hex(segmentString)))
 
 
 def processBinary(binCode):
@@ -440,6 +553,7 @@ def processBinary(binCode):
                 segmentString += binCode[0:bitSize]
                 binCode = binCode[bitSize:]
 
+
 def addToDict(key):
     global numOfChars, myDictOneLess
 
@@ -462,21 +576,23 @@ def addToDict(key):
 
 
 
+#Common Functions
+
 def hex2bin(hexCode):
     binCode = bin(int(hexCode, 16))[2:].zfill(len(hexCode) * 4)
     binCode = binCode[binCode.find('b')+1:]
-    #32 is number of bits
-    while (len(binCode) < 32):
-        binCode = "0" + binCode
     return binCode
 
+def writeToFile(contentToWrite):
+    with open(outputFilename, "ab") as myfile:
+        myfile.write(contentToWrite)
 
+def getFileSize(filePath):
+    return str(os.path.getsize(filePath))
 
 def bin2hex(binCode):
     hexCode = '%0*X' % ((len(binCode) + 3) // 4, int(binCode, 2))
     return hexCode
-
-
 
 def isSegmentFinished():
     if (isDictOneLessFull() is True):
@@ -484,16 +600,12 @@ def isSegmentFinished():
     else:
         return False
 
-
-
-#Not needed as standalone function, but helps me keep track of myDictOneLess
+#Not needed as standalone function, but useful for keeping track of myDictOneLess
 def isDictOneLessFull():
     if ( (len(myDictOneLess.items()) >= getLimitOneLess) ):
         return True
     else:
         return False
-
-
 
 def getNextBinValueFromRemainder():
     global remainder
@@ -501,24 +613,11 @@ def getNextBinValueFromRemainder():
     remainder = remainder[1:]
     return valueToReturn
 
-
-
 def getNextBinValueFromLargestKey():
     global tempUnusedKeyOneLess
     valueToReturn = tempUnusedKeyOneLess[0]
     tempUnusedKeyOneLess = tempUnusedKeyOneLess[1:]
     return valueToReturn
-
-
-
-def comp_processEndOfFileUnfinished():
-    global segmentString, remainder, goBeforeNextSection
-
-    segmentString = goBeforeNextSection + segmentString + remainder
-    while (len(segmentString) % 8 != 0):
-        segmentString += "0"
-    with open(outputFilename, "ab") as myfile:
-        myfile.write(binascii.unhexlify(bin2hex(segmentString)))
 
 
 
@@ -529,6 +628,9 @@ def comp_processEndOfFileUnfinished():
 def decompressMain(arg2):
     global remainder, stillNeedBytes, justStarted
 
+    #debug
+    global binaryString, segmentString
+
     print("Now decompressing: " + arg2)
     lastEntryRead = ""
 
@@ -538,7 +640,6 @@ def decompressMain(arg2):
         while entry:
 
             if entry.isalnum():
-
                 #1. Convert to binary
                 if (len(entry) != 32):
                     binaryString = hex2binSmall(entry)
@@ -553,16 +654,16 @@ def decompressMain(arg2):
                 decomp_processFinishedSegment()
 
             lastEntryRead = entry
-
             #Ready for next set of 16 bytes
             entry = (str(binascii.hexlify(f.read(16))))[2:-1]
 
         #Is there still unprocessed data? End of file?
-        if (len(segmentString) > 0):
+        if ((len(segmentString)) or (len(remainder)) > 0):
             #There's still data to process
             decomp_processEndOfFileUnfinished()
 
         print("Finished! :-)")
+
 
 def decomp_processRemainder():
     global remainder, segmentString
@@ -585,7 +686,6 @@ def decomp_processBinary(binCode):
     global remainder, segmentString, justStarted, decompLargeChar, getCurrentKey, decompAddAsRemainder, isValidBit
 
     if (justStarted == 1):
-
         #Determine whether valid
         if (len(segmentString) != 0):
             #todo: this is a dirty fix
@@ -611,7 +711,6 @@ def decomp_processBinary(binCode):
         justStarted = 0
 
     tempRemainder = remainder #todo: this is dirty
-
     decomp_processRemainder()
 
     numProcessed = 0
@@ -666,14 +765,12 @@ def hex2binSmall(hexCode):
     return binCode
 
 
-
 def isDecompSegmentFinished():
     #This will be less than OneLessFull UNLESS the oppLarge isn't defined
     if (decompIsDictOneLessFull() is True):
         return True
     else:
         return False
-
 
 
 def decompIsDictOneLessFull():
@@ -697,8 +794,9 @@ def decompIsDictOneLessFull():
     else:
         return False
 
+
 def decompSectionCheckRequirements():
-    global segmentString, getCurrentKey, numOfKeysFound
+    global segmentString, getCurrentKey, numOfKeysFound, isValidBit
 
     #Requirements have been met. This should only run if there are enough of the getCurrentKey
     numOfKeysFound = 0
@@ -706,7 +804,7 @@ def decompSectionCheckRequirements():
         currChar = segmentString[i:i+bitSize]
         if (currChar[:-1] == getCurrentKey):
             numOfKeysFound += 1
-    if (numOfKeysFound >= (bitSize * 2) ):
+    if ((numOfKeysFound >= (bitSize * 2) ) and (isValidBit == "1")):
         return True
     else:
         return False
@@ -731,6 +829,7 @@ def decompSection():
     segmentString += decompAddAsRemainder
     decompFinishSegment()
 
+
 def decompFakeSegment():
     global segmentString, remainder, getCurrentKey, amountBeforeReadingNextKey, beginningOfSegment, needBackup, isValidBit
 
@@ -752,13 +851,10 @@ def decompFakeSegment():
 
     amountBeforeReadingNextKey = len(beginningOfSegment)
     extractBeginOfRemainder = remainder[:amountBeforeReadingNextKey]
-
     if (getRemainder != 0):
         binaryToWrite = binaryToWrite[:-getRemainder]
 
-    #Write file
-    with open(outputFilename, "ab") as myfile:
-        myfile.write(binascii.unhexlify(bin2hex(binaryToWrite)))
+    writeToFile((binascii.unhexlify(bin2hex(binaryToWrite))))
     segmentString = ""
 
 
@@ -779,13 +875,11 @@ def decompFinishSegment():
         if (getRemainder != 0):
             binaryToWrite = binaryToWrite[:-getRemainder]
         #Write file
-        with open(outputFilename, "ab") as myfile:
-            myfile.write(binascii.unhexlify(bin2hex(binaryToWrite)))
+        writeToFile(binascii.unhexlify(bin2hex(binaryToWrite)))
         segmentString = ""
     else:
         needBackup = True
         #I NEED BACKUP
-
 
 #Thanks to https://stackoverflow.com/a/7440332
 def remove_prefix(text, prefix):
@@ -847,8 +941,8 @@ def decomp_processEndOfFileUnfinished():
     segmentString = beginningOfSegment + isValidBit + getCurrentKey + segmentString + remainder
     while (len(segmentString) % 8 != 0):
         segmentString = segmentString[:-1]
-    with open(outputFilename, "ab") as myfile:
-        myfile.write(binascii.unhexlify(bin2hex(segmentString)))
+    writeToFile(binascii.unhexlify(bin2hex(segmentString)))
 
 if __name__ == '__main__':
     main()
+#Thanks for using UZ1! 🪖

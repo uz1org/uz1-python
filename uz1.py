@@ -1,4 +1,4 @@
-#UZ1 Lossless Compression. "Unconventional ZIP" v0.90 Release Candidate. Authored by Jace Voracek. www.uz1.org
+#UZ1 Lossless Compression. "Unconventional ZIP" v0.91 Early Access. Authored by Jace Voracek. www.uz1.org
 
 #This script is highly unpolished. Same energy: https://xkcd.com/1513/
 
@@ -22,7 +22,7 @@ def intro():
     print("===================================")
     print()
     print("UZ1 Lossless Compression (uz1.org) - by Jace Voracek")
-    print("v0.90 Release Candidate - Sep 2021")
+    print("v0.91 Release Candidat - Sep 2021")
     print()
     print("NOTICE: The Python version of UZ1 currently has slow performance. Expect >1hr durations for files >1GB")
     print("Suggestion: decompress files after compressing and verify checksum hashes match the original file.")
@@ -275,7 +275,7 @@ def fakeComp():
         if (mustWriteZero == True):
             #Check for rare scenario if fake key is used too much
             numOfFakeKey = checkNumOfTimesKeyInSegment(dirtyRealBackup, fakeKey)
-            if ((numOfFakeKey is not None) and (numOfFakeKey >= (bitSize * 2)) ):
+            if (numOfFakeKey >= (bitSize * 2) ):
                 segmentString = goBeforeNextSection + "0" + segmentString
                 #This key is INVALID (rare)
             else:
@@ -318,11 +318,11 @@ def determineIfFakeFlagNeeded(keyToCheck):
     amountRemainderToCheck = 0
     if (numOfLargestKey is None):
         numOfLargestKey = 0
-    if (numOfLargestKey < (bitSize * 2) ):
+    if (numOfLargestKey < (bitSize * 2)):
         remainderToCheck = keyToCheck
         if (str(copyOfDictOneLess.get(str(remainderToCheck))) != "None"):
             amountRemainderToCheck = int(str(copyOfDictOneLess.get(str(remainderToCheck))))
-            if (amountRemainderToCheck >= (bitSize * 2) ):
+            if (amountRemainderToCheck >= (bitSize * 2)):
                 #The key is fake
                 writeFakeFlag = True
             else:
@@ -383,7 +383,7 @@ def debugCheckNumOfDictItemsInSegment(segmentToCheck):
 
 
 def testBeforeRealComp():
-    global segmentString, remainder, tempUnusedKeyOneLess, numOfLargestKey, largestKey, unusedKeyOneLess, goBeforeNextSection, mustWriteZero, testOutputSegment
+    global segmentString, remainder, tempUnusedKeyOneLess, numOfLargestKey, largestKey, unusedKeyOneLess, goBeforeNextSection, mustWriteZero
 
     bitsToProcess = ""
     numOfBitSizeRemaining = bitSize
@@ -395,10 +395,8 @@ def testBeforeRealComp():
         currChar = segmentString2[i:i+bitSize]
         if (currChar == largestKey):
             if (temp2_numOfBitSizeRemaining > 0):
-                currBin = "0"
                 temp2_numOfBitSizeRemaining -= 1
-            else:
-                currBin = "0"
+            currBin = "0"
             currChar = unusedKeyOneLess + currBin
             segmentString2 = segmentString2[:i] + currChar + segmentString2[i+bitSize:]
     segmentString2 = goBeforeNextSection + "1" + unusedKeyOneLess + segmentString2
@@ -602,7 +600,7 @@ def isSegmentFinished():
 
 #Not needed as standalone function, but useful for keeping track of myDictOneLess
 def isDictOneLessFull():
-    if ( (len(myDictOneLess.items()) >= getLimitOneLess) ):
+    if ( (len(myDictOneLess.items()) >= getLimitOneLess)):
         return True
     else:
         return False
@@ -804,7 +802,7 @@ def decompSectionCheckRequirements():
         currChar = segmentString[i:i+bitSize]
         if (currChar[:-1] == getCurrentKey):
             numOfKeysFound += 1
-    if ((numOfKeysFound >= (bitSize * 2) ) and (isValidBit == "1")):
+    if ((numOfKeysFound >= (bitSize * 2)) and (isValidBit == "1")):
         return True
     else:
         return False

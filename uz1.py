@@ -22,7 +22,7 @@ def intro():
     print("===================================")
     print()
     print("UZ1 Lossless Compression (uz1.org) - by Jace Voracek")
-    print("v0.91 Release Candidat - Sep 2021")
+    print("v0.91 Early Access - Sep 2021")
     print()
     print("NOTICE: The Python version of UZ1 currently has slow performance. Expect >1hr durations for files >1GB")
     print("Suggestion: decompress files after compressing and verify checksum hashes match the original file.")

@@ -17,13 +17,15 @@ python3 uz1.py compress fileNameWithExtensionHere
 python3 uz1.py decompress fileNameWithExtensionHere.uz1
 ```
 
+**Beta**: As of v0.90, iterative compression/decompression is now supported. Just add 'max' as a third parameter. UZ1 will iteratively compress the file until it is unable to compress further.
+
 ## About
 
 UZ1 is a lossless compression algorithm designed to compress files that generally can't be compressed further using conventional means. This makes UZ1 an "Unconventional ZIP".
 
 **Does it succeed?**
 
-Usually. Guaranteeing file compression is impossible since doing so violates the pigeonhole principle. UZ1 can often squeeze a few extra bytes from files that lack patterned data structures or are considered "highly compressed". If the file won't shrink, the UZ1 file size is usually the exact same as the source file or only a byte or two larger. This is a distinguishing feature of UZ1 since other compression algorithms often increase the file size by many kilobytes (partly due to archiving metadata) if a file cannot be compressed further.
+Usually. Guaranteeing file compression is impossible since doing so violates the pigeonhole principle. UZ1 can often squeeze a few extra bytes from files that lack patterned data structures or are considered "highly compressed". If the file won't shrink, the UZ1 file size is usually the exact same as the source file or only a byte or two larger. Other algorithms generally increase the size to several KB when files won't shrink, which makes UZ1 a standout.
 
 **Who is this for?**
 
@@ -32,8 +34,9 @@ Compression enthusiasts. Use cases where saving every byte matters. The amount o
 ## Known Issues
 
 * Windows OS specific: The script often comes to a near grinding halt when processing the last portion of large >1GB files. Has not been encountered in Ubuntu 20.04 or Mac OS Big Sur (M1).
-* The v0.1 Python implementation of UZ1 is unpolished and has slow performance.
-* The UZ1 specification isn't finalized and there may be lingering issues. Please verify checksum hashes of decompressed files with the originals.
+* The v0.91 Python implementation of UZ1 is unpolished and has slow performance.
+* UZ1 isn't finalized and there may be lingering issues. Please verify checksum hashes of decompressed files with the originals.
+* Testing is ongoing. Files compressed with previous prerelease versions of UZ1 may not be supported in the final release.
 
 ## Upcoming Features
 
@@ -45,7 +48,7 @@ UZ1 operates by having dynamically-sized pieces of the source file split into "s
 
 **Any examples of files that don't work well with UZ1?**
 
-Oddly enough plaintext files don't work well. UZ1 depends on permutations of bit sequences, which makes UZ1 the only compression algorithm in the world that can't compress standalone plaintext very well if at all. (LOL). To compress a plaintext file with UZ1, compress it with something else first before attempting to use UZ1. This sometimes applies to other pattern-structured files as well.
+Oddly enough plaintext files don't work well. UZ1 requires permutations of bit sequences, which probably makes UZ1 the only compression algorithm that can't compress standalone plaintext very well if at all. To compress a plaintext file with UZ1, compress it with something else first before attempting to use UZ1. Doing this is recommended to other pattern-structured files as well.
 
 **Are there other "cons"?**
 
@@ -53,13 +56,13 @@ No archiving support (only can compress one file). Also no checksum support. Be 
 
 **Can the Python implementation fit inside a QR code?**
 
-A very important question. Yes it can! When "minified" and compressed, v0.1 becomes 2,898 bytes which barely fits within the max 2,953 byte quota. Encoded using File2QR on Android.
+Yes it can! Just for fun, when "minified" and compressed, v0.1 becomes 2,898 bytes which barely fits within the max 2,953 byte quota. Encoded using File2QR on Android.
 
 <img src="uz1_qr.png" alt="UZ1 QR Code">
 
 **Let's see some benchmarks:**
 
-Coming soon. Will be published on [uz1.org](http://www.uz1.org/) once the homepage is built.
+Coming soon. Examples will be shown where UZ1 is effective and not effective. Will be published on [uz1.org](http://www.uz1.org/) once finalized.
 
 ## License:
 

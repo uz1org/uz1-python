@@ -269,15 +269,17 @@ def fakeComp():
     remainder = remainder[(bitSize - 1):]
 
     if (writeFakeFlag == True):
-        segmentString = goBeforeNextSection + "0" + segmentString
-        #This key is INVALID (rare)
+        #TODO: Check if remainder[0] is 0. If so, this segment won't need to grow by a bit.
+        segmentString = goBeforeNextSection + "0" + segmentString 
+        #This key is INVALID (rare). Grows by one bit.
     else:
         if (mustWriteZero == True):
             #Check for rare scenario if fake key is used too much
             numOfFakeKey = checkNumOfTimesKeyInSegment(dirtyRealBackup, fakeKey)
             if (numOfFakeKey >= (bitSize * 2) ):
+                #TODO: Check if remainder[0] is 0. If so, this segment (might) not need to grow by a bit.
                 segmentString = goBeforeNextSection + "0" + segmentString
-                #This key is INVALID (rare)
+                #This key is INVALID (rare). Grows by one bit.
             else:
                 #Need to get the next bit from remainder as the key
                 getBitFromRemainder = remainder[0]
@@ -448,15 +450,11 @@ def getOppOfChar(charToCheck):
 
 def realComp():
     global segmentString, remainder, largestKey, unusedKeyOneLess, goBeforeNextSection
+    
     bitsToProcess = ""
     numOfBitSizeRemaining = bitSize
-
-    #todo: see if the following can be achieved without breaking fakeKey during decompress. saves one bit if opp of largest key exists
-    # if (str(my_dict.get(str(getOppOfChar(largestKey)))) != "None"):
-    # numOfBitSizeRemaining -= 1
-    # print("realComp: opp of key exists")
-
     numProcessed = 0
+    
     for i in range(0, len(segmentString), bitSize):
         if (numProcessed <= numOfBitsNeededToCompress):
             currChar = segmentString[i:i+bitSize]
@@ -802,6 +800,7 @@ def decompSectionCheckRequirements():
         currChar = segmentString[i:i+bitSize]
         if (currChar[:-1] == getCurrentKey):
             numOfKeysFound += 1
+    #TODO: Next line, check if number of decompLargeChars in segmentString is >= than (bitSize * 2). This could help identify more fake keys.
     if ((numOfKeysFound >= (bitSize * 2)) and (isValidBit == "1")):
         return True
     else:
@@ -818,9 +817,8 @@ def decompSection():
         if (currChar[:-1] == getCurrentKey):
             segmentString = segmentString[:i] + decompLargeChar + segmentString[i+bitSize:]
             numOfKeysFound2 += 1
-
-    #The decompRemainder is kinda weird. We have to know the length of it.
-    #When we write segmentString to file, there's a pretty good chance that this won't fit.
+    #For decompRemainder, we have to know the length of it.
+    #When we write segmentString to file, there's a good chance that this won't fit.
     #The next real or fake key begins after this.
     if (numOfKeysFound > numOfKeysFound2):
         decompAddAsRemainder = decompAddAsRemainder[:-(numOfKeysFound - numOfKeysFound2)]

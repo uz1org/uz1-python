@@ -1,6 +1,4 @@
-#UZ1 Lossless Compression. "Unconventional ZIP" v0.91 Early Access. Authored by Jace Voracek. www.uz1.org
-
-#This script is highly unpolished. Same energy: https://xkcd.com/1513/
+#UZ1 Lossless Compression. "Unconventional ZIP" v0.93 Early Access. Authored by Jace Voracek. www.uz1.org
 
 import os, binascii, operator, collections, sys
 from os import path
@@ -22,10 +20,10 @@ def intro():
     print("===================================")
     print()
     print("UZ1 Lossless Compression (uz1.org) - by Jace Voracek")
-    print("v0.91 Early Access - Sep 2021")
+    print("v0.93 Early Access - Nov 2021")
     print()
     print("NOTICE: The Python version of UZ1 currently has slow performance. Expect >1hr durations for files >1GB")
-    print("Suggestion: decompress files after compressing and verify checksum hashes match the original file.")
+    print("Recommended: decompress files after compressing and verify checksum hashes match the original file.")
     print("No warranty is issued for the usage of this script. User assumes all risk.")
     print()
     print()
@@ -42,11 +40,9 @@ def printHelp():
     print("Beta feature: Add 'max' as a third parameter to reiterate compression/decompression")
     print()
 
+
 def main():
-    global arg2
-    global outputFilename
-    global currentIteration
-    global doMaxIteration
+    global arg2, outputFilename, currentIteration, doMaxIteration
 
     currentIteration = 0
     doMaxIteration = False
@@ -111,20 +107,19 @@ def main():
         else:
             printHelp()
 
+
 #Common vars
-bitSize = 8
+bitSize = 8 #Currently only supports eight bits or more
 my_dict = {}
 myDictOneLess = {}
 sorted_dict = {}
-copyOfDictOneLess = {}
 segmentString = remainder = ""
 getLimitOneLess = ((2**(bitSize-1))-1)
 numOfBitsNeededToCompress = 32 #arbitrary
 numOfChars = numOfLargestKey = 0
-writeFakeFlag = mustWriteZero = stillNeedBytes = False
-largestKey = unusedKeyOneLess = oppLargeKeyValue = oppLargeKey = goBeforeNextSection = inputFileSize = ""
+largestKey = unusedKeyOneLess = oppLargeKeyValue = oppLargeKey = goBeforeNextSection = inputFileSize = getDecompLargeChar = ""
+alertedForUncompressedDataBlock = stillNeedBytes = False
 dirtyRealBackup = "" #todo: clean
-alertedForUncompressedDataBlock = False
 
 #Common vars for decompression
 decompLargeChar = getCurrentKey = decompAddAsRemainder = beginningOfSegment = isValidBit = backupSegmentString = unusedCharInBackup = ""
@@ -144,12 +139,10 @@ def compressMain(arg2):
         #Read file as hex 16 bytes at a time
         entry = (str(binascii.hexlify(f.read(16))))[2:-1]
         while entry:
-
             if (stillNeedBytes == True):
                 if entry.isalnum():
                     remainder += hex2bin(entry)
                     if (len(remainder) > numOfLargestKey):
-                        determineIfFakeFlagNeeded(remainder[:(bitSize - 1)])
                         getValuesForComp()
                         stillNeedBytes = False
             else:
@@ -175,7 +168,6 @@ def compressMain(arg2):
                 #Determine if the current segment is done
                 if (isSegmentFinished() is True):
                     processFinishedSegment()
-
             #Ready for next set of 16 bytes
             entry = (str(binascii.hexlify(f.read(16))))[2:-1]
 
@@ -188,7 +180,7 @@ def compressMain(arg2):
     if (sizeDiff >= 0):
         print("Output is " + getFileSize(outputFilename) + " bytes. Saved " + str(sizeDiff) + " bytes from original.")
     else:
-        print("Output is " + getFileSize(outputFilename) + " bytes. Grew " + str(sizeDiff) + " bytes from original.")
+        print("Output is " + getFileSize(outputFilename) + " bytes. Grew " + str(sizeDiff*-1) + " bytes from original.")
     print()
 
 
@@ -221,7 +213,7 @@ def compressMax(arg2):
 
 def decompResetVars():
     global my_dict,myDictOneLess,segmentString,numOfChars,numOfLargestKey,largestKey,decompLargeChar,getCurrentKey,decompAddAsRemainder,beginningOfSegment,unusedCharInBackup,binaryString
-    global amountBeforeReadingNextKey, justStarted
+    global amountBeforeReadingNextKey,justStarted,getDecompLargeChar
     my_dict = {}
     myDictOneLess = {}
     segmentString = ""
@@ -234,6 +226,7 @@ def decompResetVars():
     beginningOfSegment = ""
     unusedCharInBackup = ""
     binaryString = ""
+    getDecompLargeChar = ""
     amountBeforeReadingNextKey = 0
     justStarted = 1
 
@@ -246,8 +239,7 @@ def decompressMax(arg2):
         decompResetVars()
         currentIteration = currentIteration - 1
         previousFile = outputFilename
-        print("currentIteration: " + str(currentIteration))
-        print("previousFile: " + previousFile)
+        print()
         if (currentIteration == -1):
             outputFilename = outputFilename.split('.')[0] + "." + outputFilename.split('.')[1]
         else:
@@ -258,50 +250,37 @@ def decompressMax(arg2):
 
 
 def fakeComp():
-    global segmentString, remainder, largestKey, goBeforeNextSection, writeFakeFlag, mustWriteZero, dirtyRealBackup
+    global segmentString, remainder, largestKey, goBeforeNextSection, dirtyRealBackup, getDecompLargeChar
 
-    bitsToProcess = ""
-    numOfBitSizeRemaining = bitSize
-    tempUnusedKeyOneLess = largestKey
     #Write remainder to beginning instead of key. No compression here!
-    segmentString = remainder[:(bitSize - 1)] + segmentString
     fakeKey = remainder[:(bitSize - 1)]
+    numOfFakeKey = checkNumOfTimesKeyOneLessInSegment(dirtyRealBackup, fakeKey)
+    numOfDecompLargeChar = checkNumOfTimesKeyInSegment(dirtyRealBackup, getDecompLargeChar)
+    segmentString = fakeKey + segmentString
     remainder = remainder[(bitSize - 1):]
 
-    if (writeFakeFlag == True):
-        #TODO: Check if remainder[0] is 0. If so, this segment won't need to grow by a bit.
-        segmentString = goBeforeNextSection + "0" + segmentString 
+    #TODO: Check if remainder[0] is 0. If so, this segment won't need to grow by a bit.
+    if ((numOfFakeKey >= (bitSize * 2)) and (numOfDecompLargeChar == 0)):
+        segmentString = goBeforeNextSection + "0" + segmentString
         #This key is INVALID (rare). Grows by one bit.
     else:
-        if (mustWriteZero == True):
-            #Check for rare scenario if fake key is used too much
-            numOfFakeKey = checkNumOfTimesKeyInSegment(dirtyRealBackup, fakeKey)
-            if (numOfFakeKey >= (bitSize * 2) ):
-                #TODO: Check if remainder[0] is 0. If so, this segment (might) not need to grow by a bit.
-                segmentString = goBeforeNextSection + "0" + segmentString
-                #This key is INVALID (rare). Grows by one bit.
-            else:
-                #Need to get the next bit from remainder as the key
-                getBitFromRemainder = remainder[0]
-                remainder = remainder[1:]
-                segmentString = goBeforeNextSection + getBitFromRemainder + segmentString
-        else:
-            #Need to get the next bit from remainder as the key
-            getBitFromRemainder = remainder[0]
-            remainder = remainder[1:]
-            segmentString = goBeforeNextSection + getBitFromRemainder + segmentString
+        proceedWithFake()
+
+
+def proceedWithFake():
+    global remainder, segmentString, goBeforeNextSection
+    getBitFromRemainder = remainder[0]
+    remainder = remainder[1:]
+    segmentString = goBeforeNextSection + getBitFromRemainder + segmentString
 
 
 def getValuesForComp():
     global segmentString, numOfLargestKey, largestKey, goBeforeNextSection, dirtyRealBackup
-    #temp
-    global myDictOneLess
-    bitsToProcess = ""
-    numOfBitSizeRemaining = bitSize
+
     #todo: this is dirty
     dirtyRealBackup = segmentString
 
-    if (numOfLargestKey >= (bitSize * 2)):
+    if ((numOfLargestKey >= (bitSize * 2)) and (numOfLargestKey <= numOfBitsNeededToCompress)):
         canCompress = testBeforeRealComp()
         if (canCompress == True):
             realComp()
@@ -313,31 +292,9 @@ def getValuesForComp():
     finishSegment()
 
 
-def determineIfFakeFlagNeeded(keyToCheck):
-    global numOfLargestKey, remainder, copyOfDictOneLess, writeFakeFlag
-
-    remainderToCheck = ""
-    amountRemainderToCheck = 0
-    if (numOfLargestKey is None):
-        numOfLargestKey = 0
-    if (numOfLargestKey < (bitSize * 2)):
-        remainderToCheck = keyToCheck
-        if (str(copyOfDictOneLess.get(str(remainderToCheck))) != "None"):
-            amountRemainderToCheck = int(str(copyOfDictOneLess.get(str(remainderToCheck))))
-            if (amountRemainderToCheck >= (bitSize * 2)):
-                #The key is fake
-                writeFakeFlag = True
-            else:
-                writeFakeFlag = False
-        else:
-            writeFakeFlag = False
-    else:
-        writeFakeFlag = False
-    copyOfDictOneLess = {}
-
 def processFinishedSegment():
     global my_dict, myDictOneLess, sorted_dict, numOfChars, remainder, largestKey, stillNeedBytes
-    global numOfLargestKey, unusedKeyOneLess, oppLargeKeyValue, oppLargeKey, writeFakeFlag, copyOfDictOneLess
+    global numOfLargestKey, unusedKeyOneLess, oppLargeKeyValue, oppLargeKey, writeFakeFlag, getDecompLargeChar
 
     sorted_dict = collections.OrderedDict(sorted(my_dict.items(), key=operator.itemgetter(1)))
     largestKey = str(list(sorted_dict.keys())[-1])
@@ -345,27 +302,42 @@ def processFinishedSegment():
     unusedKeyOneLess = checkUnusedChar(myDictOneLess)
     numOfLargestKey = my_dict.get(str(largestKey))
     oppLargeKeyValue = str(my_dict.get(str(oppLargeKey)))
-    copyOfDictOneLess = myDictOneLess
 
     #Check if more bytes are needed
     if (len(remainder) <= numOfBitsNeededToCompress):
         stillNeedBytes = True
     else:
-        determineIfFakeFlagNeeded(remainder[:(bitSize - 1)])
         getValuesForComp()
 
     my_dict = {}
     sorted_dict = {}
     myDictOneLess = {}
+    getDecompLargeChar = ""
     numOfChars = 0
     writeFakeFlag = False
+
+
+def checkNumOfTimesKeyOneLessInSegment(segmentToCheck, keyToCheck):
+    global getDecompLargeChar
+    tempNumOfKeysFound = 0
+    getDecompLargeChar = ""
+    tempDecompLargeChar = ""
+    for i in range(0, len(segmentToCheck), bitSize):
+        key = segmentToCheck[i:i+bitSize]
+        if (key[:-1] == (keyToCheck)):
+            tempNumOfKeysFound += 1
+            if (len(tempDecompLargeChar) < bitSize):
+                tempDecompLargeChar += key[-1:]
+    if (len(tempDecompLargeChar) == bitSize):
+        getDecompLargeChar = tempDecompLargeChar
+    return tempNumOfKeysFound
 
 
 def checkNumOfTimesKeyInSegment(segmentToCheck, keyToCheck):
     tempNumOfKeysFound = 0
     for i in range(0, len(segmentToCheck), bitSize):
         key = segmentToCheck[i:i+bitSize]
-        if (key[:-1] == (keyToCheck)):
+        if (key == (keyToCheck)):
             tempNumOfKeysFound += 1
     return tempNumOfKeysFound
 
@@ -385,9 +357,8 @@ def debugCheckNumOfDictItemsInSegment(segmentToCheck):
 
 
 def testBeforeRealComp():
-    global segmentString, remainder, tempUnusedKeyOneLess, numOfLargestKey, largestKey, unusedKeyOneLess, goBeforeNextSection, mustWriteZero
+    global segmentString, remainder, tempUnusedKeyOneLess, numOfLargestKey, largestKey, unusedKeyOneLess, goBeforeNextSection
 
-    bitsToProcess = ""
     numOfBitSizeRemaining = bitSize
     tempUnusedKeyOneLess = largestKey
     segmentString2 = segmentString
@@ -406,12 +377,10 @@ def testBeforeRealComp():
     #We're going to read the whole string using unusedKeyOneLess
     temp_dictOneLess = {}
     temp_segmentString = segmentString2[(bitSize):]
-    testOutputSegment = ""
     tempNumOfKeysFound = 0
 
     for i in range(0, len(temp_segmentString), bitSize):
         key = temp_segmentString[i:i+bitSize]
-        testOutputSegment += key
         key = key[:-1]
 
         if (key == (unusedKeyOneLess)):
@@ -433,7 +402,6 @@ def testBeforeRealComp():
     if (tempNumOfKeysFound != numOfLargestKey):
         #This does not match the needed numOfLargestKey
         canCompress = False
-        mustWriteZero = True
     else:
         #Matches! We're good to compress
         canCompress = True
@@ -450,11 +418,10 @@ def getOppOfChar(charToCheck):
 
 def realComp():
     global segmentString, remainder, largestKey, unusedKeyOneLess, goBeforeNextSection
-    
-    bitsToProcess = ""
+
     numOfBitSizeRemaining = bitSize
     numProcessed = 0
-    
+
     for i in range(0, len(segmentString), bitSize):
         if (numProcessed <= numOfBitsNeededToCompress):
             currChar = segmentString[i:i+bitSize]
@@ -519,7 +486,6 @@ def comp_processEndOfFileUnfinished():
     global segmentString, remainder, goBeforeNextSection
 
     segmentString = goBeforeNextSection + segmentString + remainder
-    #print("endOfFile segmentString: " + segmentString)
     while (len(segmentString) % 8 != 0):
         segmentString += "0"
     writeToFile(binascii.unhexlify(bin2hex(segmentString)))
@@ -571,7 +537,6 @@ def addToDict(key):
             myDictOneLess[key] = 1
 
 
-
 #Common Functions
 
 def hex2bin(hexCode):
@@ -618,14 +583,10 @@ def getNextBinValueFromLargestKey():
 
 
 
-
 #DECOMP FUNCTIONS
 
 def decompressMain(arg2):
-    global remainder, stillNeedBytes, justStarted
-
-    #debug
-    global binaryString, segmentString
+    global remainder, stillNeedBytes, justStarted, binaryString, segmentString
 
     print("Now decompressing: " + arg2)
     lastEntryRead = ""
@@ -684,7 +645,6 @@ def decomp_processBinary(binCode):
     if (justStarted == 1):
         #Determine whether valid
         if (len(segmentString) != 0):
-            #todo: this is a dirty fix
             remainder = segmentString + remainder
             segmentString = ""
         if (len(remainder) == 0):
@@ -752,6 +712,7 @@ def decomp_processBinary(binCode):
                 segmentString += binCode[0:bitSize]
                 binCode = binCode[bitSize:]
 
+
 #Use this if there's not very many characters at end
 def hex2binSmall(hexCode):
     binCode = bin(int(hexCode, 16))[2:].zfill(len(hexCode) * 4)
@@ -792,16 +753,18 @@ def decompIsDictOneLessFull():
 
 
 def decompSectionCheckRequirements():
-    global segmentString, getCurrentKey, numOfKeysFound, isValidBit
+    global segmentString, getCurrentKey, numOfKeysFound, isValidBit, decompLargeChar, numOfLargeCharFound
 
     #Requirements have been met. This should only run if there are enough of the getCurrentKey
     numOfKeysFound = 0
+    numOfLargeCharFound = 0
     for i in range(0, len(segmentString), bitSize):
         currChar = segmentString[i:i+bitSize]
         if (currChar[:-1] == getCurrentKey):
             numOfKeysFound += 1
-    #TODO: Next line, check if number of decompLargeChars in segmentString is >= than (bitSize * 2). This could help identify more fake keys.
-    if ((numOfKeysFound >= (bitSize * 2)) and (isValidBit == "1")):
+        if (currChar == decompLargeChar):
+            numOfLargeCharFound += 1
+    if ((numOfKeysFound >= (bitSize * 2)) and (isValidBit == "1") and (numOfLargeCharFound == 0)):
         return True
     else:
         return False
@@ -827,19 +790,18 @@ def decompSection():
 
 
 def decompFakeSegment():
-    global segmentString, remainder, getCurrentKey, amountBeforeReadingNextKey, beginningOfSegment, needBackup, isValidBit
+    global segmentString, remainder, amountBeforeReadingNextKey, beginningOfSegment, needBackup, isValidBit, numOfLargeCharFound
 
     binaryToWrite = beginningOfSegment + segmentString + getCurrentKey + ""
 
     #If needBackup is true, it's part of the invalid (rare) scenario
     if (needBackup == False):
-        binaryToWrite = beginningOfSegment + segmentString + getCurrentKey + ""
         #isValidBit goes to remainder. Not needed if this is a backup.
         binaryToWrite += isValidBit
-        #Added bit in front here (not backup)
-
+    else:
+        if (numOfLargeCharFound != 0):
+            binaryToWrite += isValidBit
     getRemainder = (len(binaryToWrite) % 8)
-
     if (getRemainder != 0):
         beginningOfSegment = binaryToWrite[-getRemainder:]
     else:
@@ -855,9 +817,9 @@ def decompFakeSegment():
 
 
 def decompFinishSegment():
-    global segmentString, remainder, amountBeforeReadingNextKey, beginningOfSegment, isValidBit, needBackup
+    global segmentString, remainder, amountBeforeReadingNextKey, beginningOfSegment, isValidBit, needBackup, numOfLargeCharFound
 
-    if (isValidBit == "1"):
+    if ((isValidBit == "1") and (numOfLargeCharFound == 0)):
         binaryToWrite = beginningOfSegment + segmentString + ""
         getRemainder = (len(binaryToWrite) % 8)
         if (getRemainder != 0):
@@ -884,7 +846,7 @@ def remove_prefix(text, prefix):
 
 def decomp_processFinishedSegment():
     global my_dict, myDictOneLess, sorted_dict, numOfChars, segmentString, remainder, largestKey, numOfLargestKey, getCurrentKey, decompAddAsRemainder
-    global justStarted, numOfKeysFound, needBackup, backupSegmentString, alreadyMadeBackup, decompLargeChar, unusedCharInBackup
+    global justStarted, numOfKeysFound, needBackup, backupSegmentString, alreadyMadeBackup, decompLargeChar, unusedCharInBackup, getDecompLargeChar
 
     segmentAfterBackup = remove_prefix(segmentString, backupSegmentString)
 
@@ -898,7 +860,7 @@ def decomp_processFinishedSegment():
     if (numOfKeysFound >= (bitSize * 2) ):
         #We have enough keys
         #If the following is true, and the numOfKeysFound in backup is also true, we need to use the backup if numOfKeysFound is greater
-        checkNumOfKeysInBackup = checkNumOfTimesKeyInSegment(backupSegmentString, getCurrentKey)
+        checkNumOfKeysInBackup = checkNumOfTimesKeyOneLessInSegment(backupSegmentString, getCurrentKey)
         if ((checkNumOfKeysInBackup >= (bitSize * 2)) and (checkNumOfKeysInBackup <= numOfKeysFound)):
             #The following determines if we need a backup
             if (unusedCharInBackup is not None):
@@ -924,6 +886,7 @@ def decomp_processFinishedSegment():
     decompAddAsRemainder = ""
     beginningOfSegment = ""
     backupSegmentString = ""
+    getDecompLargeChar = ""
     justStarted = 1
     numOfChars = 0
     numOfKeysFound = 0

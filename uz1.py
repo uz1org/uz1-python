@@ -261,7 +261,7 @@ def fakeComp():
     remainder = remainder[(bitSize - 1):]
     
     getOppOfDecompLargeChar = getOppOfChar(getDecompLargeChar)
-    numOfOppOfDecompLargeChar = checkNumOfTimesKeyInSegment(dirtyRealBackup, getOppOfDecompLargeChar))
+    numOfOppOfDecompLargeChar = checkNumOfTimesKeyInSegment(dirtyRealBackup, getOppOfDecompLargeChar)
 
     #TODO: Check if remainder[0] is 0. If so, this segment won't need to grow by a bit.
     if (numOfOppOfDecompLargeChar is not None):

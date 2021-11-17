@@ -1,4 +1,4 @@
-#UZ1 Lossless Compression. "Unconventional ZIP" v0.93 Early Access. Authored by Jace Voracek. www.uz1.org
+#UZ1 Lossless Compression. "Unconventional ZIP" v0.95 Early Access. Authored by Jace Voracek. www.uz1.org
 
 import os, binascii, operator, collections, sys
 from os import path
@@ -20,7 +20,7 @@ def intro():
     print("===================================")
     print()
     print("UZ1 Lossless Compression (uz1.org) - by Jace Voracek")
-    print("v0.93 Early Access - Nov 2021")
+    print("v0.95 Early Access - Nov 2021")
     print()
     print("NOTICE: The Python version of UZ1 currently has slow performance. Expect >1hr durations for files >1GB")
     print("Recommended: decompress files after compressing and verify checksum hashes match the original file.")
@@ -110,6 +110,7 @@ def main():
 
 #Common vars
 bitSize = 8 #Currently only supports eight bits or more
+neededGetOpp = 3 #arbitrary
 my_dict = {}
 myDictOneLess = {}
 sorted_dict = {}
@@ -258,11 +259,17 @@ def fakeComp():
     numOfDecompLargeChar = checkNumOfTimesKeyInSegment(dirtyRealBackup, getDecompLargeChar)
     segmentString = fakeKey + segmentString
     remainder = remainder[(bitSize - 1):]
+    
+    getOppOfDecompLargeChar = getOppOfChar(getDecompLargeChar)
+    numOfOppOfDecompLargeChar = checkNumOfTimesKeyInSegment(dirtyRealBackup, getOppOfDecompLargeChar))
 
     #TODO: Check if remainder[0] is 0. If so, this segment won't need to grow by a bit.
-    if ((numOfFakeKey >= (bitSize * 2)) and (numOfDecompLargeChar == 0)):
-        segmentString = goBeforeNextSection + "0" + segmentString
-        #This key is INVALID (rare). Grows by one bit.
+    if (numOfOppOfDecompLargeChar is not None):
+        if ((numOfFakeKey >= (bitSize * 2)) and (numOfDecompLargeChar == 0) and (numOfOppOfDecompLargeChar >= neededGetOpp)):
+            segmentString = goBeforeNextSection + "0" + segmentString
+            #This key is INVALID (rare). Grows by one bit.
+        else:
+            proceedWithFake()
     else:
         proceedWithFake()
 
@@ -279,11 +286,16 @@ def getValuesForComp():
 
     #todo: this is dirty
     dirtyRealBackup = segmentString
-
-    if ((numOfLargestKey >= (bitSize * 2)) and (numOfLargestKey <= numOfBitsNeededToCompress)):
-        canCompress = testBeforeRealComp()
-        if (canCompress == True):
-            realComp()
+    
+    numOfOppOfLargestKey = checkNumOfTimesKeyInSegment(dirtyRealBackup, str(getOppOfChar(largestKey)))
+    
+    if (numOfOppOfLargestKey is not None):
+        if ((numOfLargestKey >= (bitSize * 2)) and (numOfLargestKey <= numOfBitsNeededToCompress) and (numOfOppOfLargestKey >= neededGetOpp)):
+            canCompress = testBeforeRealComp()
+            if (canCompress == True):
+                realComp()
+            else:
+                fakeComp()
         else:
             fakeComp()
     else:
@@ -856,21 +868,25 @@ def decomp_processFinishedSegment():
     sorted_dict = collections.OrderedDict(sorted(my_dict.items(), key=operator.itemgetter(1)))
     largestKey = str(list(sorted_dict.keys())[-1])
     numOfLargestKey = my_dict.get(str(largestKey))
-
-    if (numOfKeysFound >= (bitSize * 2) ):
-        #We have enough keys
-        #If the following is true, and the numOfKeysFound in backup is also true, we need to use the backup if numOfKeysFound is greater
-        checkNumOfKeysInBackup = checkNumOfTimesKeyOneLessInSegment(backupSegmentString, getCurrentKey)
-        if ((checkNumOfKeysInBackup >= (bitSize * 2)) and (checkNumOfKeysInBackup <= numOfKeysFound)):
-            #The following determines if we need a backup
-            if (unusedCharInBackup is not None):
-                if (unusedCharInBackup == decompLargeChar[:-1]):
-                    remainder = segmentAfterBackup + remainder2
-                    segmentString = backupSegmentString
-                    #We're using backup
-        decompSection()
+    numOfOppOfDecompLargeChar = my_dict.get(str(getOppOfChar(decompLargeChar)))
+    
+    if (numOfOppOfDecompLargeChar is not None):
+        if ((numOfKeysFound >= (bitSize * 2)) and (numOfOppOfDecompLargeChar >= neededGetOpp)):
+            #We have enough keys
+            #If the following is true, and the numOfKeysFound in backup is also true, we need to use the backup if numOfKeysFound is greater
+            checkNumOfKeysInBackup = checkNumOfTimesKeyOneLessInSegment(backupSegmentString, getCurrentKey)
+            if ((checkNumOfKeysInBackup >= (bitSize * 2)) and (checkNumOfKeysInBackup <= numOfKeysFound)):
+                #The following determines if we need a backup
+                if (unusedCharInBackup is not None):
+                    if (unusedCharInBackup == decompLargeChar[:-1]):
+                        remainder = segmentAfterBackup + remainder2
+                        segmentString = backupSegmentString
+                        #We're using backup
+            decompSection()
+        else:
+            #Not enough keys
+            decompFakeSegment()
     else:
-        #Not enough keys
         decompFakeSegment()
 
     if (needBackup == True):

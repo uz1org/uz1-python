@@ -1,11 +1,12 @@
 #UZ1 Lossless Compression. "Unconventional ZIP" v0.96a WIP. Authored by Jace Voracek. www.uz1.org
-#This is experimental. Not the main UZ1 algorithm. Currently just for testing.
-#Todo: bug fixes for decompression regular scenario needed. Add recursive bit deducer.
+#This is experimental. Not the main UZ1 algorithm. Currently just for testing
+#IPout
+#Todo: bug fixes for decompression regular scenario needed. Add recursive bit deducer
 
 # Compress Notes - Abstract for each of the three segment scenarios.
 # At 126, bigChar16 turns to 7seq.
 # (7)(1 (real)) - (7 bits)(8 bits the extra)
-#Shrinks by one bit
+# Shrinks by one bit
 #
 # After 127 is 128
 # At 128, fake 7seq stays as 7seq
@@ -142,8 +143,8 @@ sorted_dict = {}
 getLimitOneLess = ((2**(bitSize-1))-2) #126
 numOfBitsNeededToCompress = 32 #arbitrary
 numOfChars = numOfLargestKey = numOfCheckFakeKey = searchingForFakeCharOr128 = startedDecomp = 0
-segmentString = remainder = largestKey = unusedKeyOneLess = goBeforeNextSection = inputFileSize = getDecompLargeChar = globalProcessType = theBitsFrom7seq = lastCharAfter127 = firstChar = injectAfterThisChar = ""
-alertedForUncompressedDataBlock = stillNeedBytes = typeCompress = getOneMoreBit = dirtyFix_afterFirstSeg = checkedFirstInDict = checkedSecondInDict = checkedThirdInDict = checkedFourthInDict = False
+segmentString = remainder = largestKey = unusedKeyOneLess = goBeforeNextSection = inputFileSize = getDecompLargeChar = globalProcessType = theBitsFrom7seq = lastCharAfter127 = firstChar = injectAfterThisChar = dirtyPadding = ""
+alertedForUncompressedDataBlock = stillNeedBytes = typeCompress = getOneMoreBit = dirtyFix_afterFirstSeg = checkedFirstInDict = checkedSecondInDict = checkedThirdInDict = checkedFourthInDict = dirtyHasPaddingSectionBeenUsed = False
 
 
 #Common vars for decompression
@@ -253,6 +254,7 @@ def injectCharAfterThis(injectAfterThisChar, keyToInject):
 
 def stepTwo_checkFor7seq(segmentString, checkFakeKey, my_dict, myDictOneLess):
     numOfCheckFakeKey = myDictOneLess.get(str(checkFakeKey))
+    #print("stepTwo_checkFor7seq - " + "myDictOneLess: " + str(len(myDictOneLess)) + " numOfCheckFakeKey: " + str(numOfCheckFakeKey) + " checkFakeKey: " + checkFakeKey)
     if (numOfCheckFakeKey == 16):
         numOfCheckFakeKey0 = str(my_dict.get(str(checkFakeKey + "0")))
         numOfCheckFakeKey1 = str(my_dict.get(str(checkFakeKey + "1")))
@@ -264,7 +266,7 @@ def stepTwo_checkFor7seq(segmentString, checkFakeKey, my_dict, myDictOneLess):
     return numOfCheckFakeKey
 
 def getValuesForComp():
-    global segmentString, numOfLargestKey, largestKey, goBeforeNextSection
+    global segmentString, numOfLargestKey, largestKey
     global sorted_dict, unusedKeyOneLess, remainder, myDictOneLess, unusedKeyOneLess, bigCharSixteen
     global numOfSixteenDetected, numOfCheckFakeKey, injectAfterThisChar, dirtyFix_afterFirstSeg
 
@@ -272,7 +274,7 @@ def getValuesForComp():
         if (globalProcessType == "compress"):
             realCompSixteen()
             numOfSixteenDetected = 0
-        elif (globalProcessType == "fakeComp7seq - ying yang method"):
+        elif (globalProcessType == "fakeComp7seq"): #ying yang method
             fakeComp7seq()
         elif (globalProcessType == "fakeComp128"):
             fakeComp128()
@@ -298,8 +300,6 @@ def getValuesForComp():
                 dirtyFix_afterFirstSeg = True
             else:
                 segmentString = segmentString[8:] + firstChar
-
-    goBeforeNextSection = ""
     finishSegment()
 
 def realCompSixteen():
@@ -359,10 +359,14 @@ def fakeComp128():
     if (fullKey[-1:] == "0"):
         #0 uses 7seq
         insertChar = fullKey[0:7] + lastBitOflastChar128
+        #print("fakeComp - Using 7seq (0)")
+
     else:
         #1 uses 128
         insertChar = lastChar128[0:7] + lastBitOflastChar128
-    segmentString = goBeforeNextSection + "0" + lastCharAfter127[0:7] + segmentString + insertChar
+        #print("fakeComp - Using 128 (1)")
+    remainder = remainder[8:]
+    segmentString = goBeforeNextSection + "0" + fullKey[0:7] + segmentString + insertChar
 
 def regularFake():
     global remainder, tempRemainder, segmentString, goBeforeNextSection, lastCharAfter127
@@ -452,6 +456,7 @@ def realComp():
 def finishSegment():
     global segmentString, remainder, goBeforeNextSection, startedDecomp
 
+    goBeforeNextSection = ""
     startedDecomp = 1
     binaryToWrite = segmentString + ""
     getRemainder = (len(binaryToWrite) % 8)
@@ -498,7 +503,12 @@ def checkUnusedChar(sorted_dict):
 def comp_processEndOfFileUnfinished():
     global segmentString, remainder, goBeforeNextSection
 
-    segmentString = goBeforeNextSection + segmentString + remainder
+    global dirtyHasPaddingSectionBeenUsed, dirtyPadding
+    if (dirtyHasPaddingSectionBeenUsed == True):
+        segmentString = dirtyPadding + goBeforeNextSection + segmentString + remainder
+    else:
+        segmentString = goBeforeNextSection + segmentString + remainder
+
     while (len(segmentString) % 8 != 0):
         segmentString += "0"
     writeToFile(binascii.unhexlify(bin2hex(segmentString)))
@@ -645,6 +655,8 @@ def isSegmentFinished(tempRemainder, calledFrom):
     global numOfCheckFakeKey, searchingForFakeCharOr128, checkFakeKey, globalProcessType, theBitsFrom7seq, getOneMoreBit
     global startedDecomp, firstChar, typeCompress, injectAfterThisChar
 
+    currentChar = segmentString[-8:]
+
     if (typeCompress == False):
         currentChar = segmentString[-8:]
         if (len(myDictOneLess.items()) == 127):
@@ -708,29 +720,28 @@ def isSegmentFinished(tempRemainder, calledFrom):
             globalProcessType = "fakeKey128_1"
             return True
     else:
+        lastCharAfter127 = tempRemainder[0:8]
         #Step 1. Check if the number of chars is equal to 126
         if (len(myDictOneLess.items()) == 126):
             sortedDictOneLess = collections.OrderedDict(sorted(myDictOneLess.items(), key=operator.itemgetter(1)))
             unusedKeyOneLessList = checkUnusedCharList(sortedDictOneLess)
             numOfSixteenDetected = stepOne_checkForSixteen(my_dict)
-
             if (numOfSixteenDetected == 1):
                 globalProcessType = "compress"
+                print("Shrink")
                 return True
-
             #If there are not fifteen, need to go to 127
             #Need to go to 127 before this step...
             #Step 2: Check for 7seq remainder
         elif ((len(myDictOneLess.items()) == 127) and (searchingForFakeCharOr128 == 0)):
             checkFakeKey = tempRemainder[0:7]
             bitAfterCheckFakeKey = tempRemainder[7:8]
-            lastCharAfter127 = tempRemainder[0:8]
+            #lastCharAfter127 = tempRemainder[0:8]
             numOfCheckFakeKey = stepTwo_checkFor7seq(segmentString, checkFakeKey, my_dict, myDictOneLess)
             if (numOfCheckFakeKey == 16):
                 searchingForFakeCharOr128 = 1
                 #Check if fakeKey is next or 128
                 tempRemainder = tempRemainder[8:]
-
                 theBitsFrom7seq = getBitsFrom7seqInSegmentString(segmentString, checkFakeKey)
 
                 #Check if first eight bits exist in the segment.
@@ -749,18 +760,46 @@ def isSegmentFinished(tempRemainder, calledFrom):
                 return True
 
         elif ((len(myDictOneLess.items()) == 127) and (searchingForFakeCharOr128 >= 1)):
+            #checkFakeKey = tempRemainder[0:7]
             if (searchingForFakeCharOr128 == 1):
                 segmentString = segmentString[:-8]
                 searchingForFakeCharOr128 = 2
                 return False
             elif (searchingForFakeCharOr128 == 2):
-                currentChar = segmentString[-8:]
                 if (currentChar[0:7] == checkFakeKey):
-                    #Don't need theBitsFrom7seq. This scenario grows since eigth bit of fakeChar will be missing.
-                    globalProcessType = "fakeComp7seq"
+                    theBitsFrom7seq = getBitsFrom7seqInSegmentString(segmentString, checkFakeKey)
+                    checkNumOfOpp = checkNumOfTimesKeyInSegment(segmentString, getOppOfChar(theBitsFrom7seq[0:8]))
+                    checkNumOfReg = checkNumOfTimesKeyInSegment(segmentString, theBitsFrom7seq[0:8])
+                    checkNumOfCurrentChar = checkNumOfTimesKeyInSegment(segmentString, currentChar)
+                    numOfCheckFakeKey = stepTwo_checkFor7seq(segmentString, checkFakeKey, my_dict, myDictOneLess)
+                    #DIRTY TODO: Below numOfCheckFakeKey should be 16, but we're going to use 18. 17 is fakeChar, 18 is next 7seq.
+                    if ((checkNumOfOpp >= 2) and (checkNumOfReg == 0) and (numOfCheckFakeKey == 18)):
+                        #Don't need theBitsFrom7seq. This scenario grows since eighth bit of fakeChar will be missing.
+                        globalProcessType = "fakeComp7seq"
+                        print("Grow: " + "checkNumOfReg: " + (theBitsFrom7seq[0:8]) + ": " + str(checkNumOfReg) + " checkNumOfOpp: " + getOppOfChar(theBitsFrom7seq[0:8]) + ": " + str(checkNumOfOpp) + " numOfCheckFakeKey: " + str(numOfCheckFakeKey) + " fakeKey: " + checkFakeKey + " currentChar: " + currentChar + ": " + str(checkNumOfCurrentChar))
+                    else:
+                        globalProcessType = "regular"
+                        #debug
+                        global dirtyHasPaddingSectionBeenUsed, dirtyPadding
+                        dirtyHasPaddingSectionBeenUsed = True
+                        dirtyPadding = lastCharAfter127
+                        #segmentString += lastCharAfter127
+                        #print("SameDirty: " + "checkNumOfReg: " + (theBitsFrom7seq[0:8]) + ": " + str(checkNumOfReg) + " checkNumOfOpp: " + getOppOfChar(theBitsFrom7seq[0:8]) + ": " + str(checkNumOfOpp) + " numOfCheckFakeKey: " + str(numOfCheckFakeKey) + " fakeKey: " + checkFakeKey + " currentChar: " + currentChar + ": " + str(checkNumOfCurrentChar))
                     return True
         elif (len(myDictOneLess.items()) == 128):
             globalProcessType = "fakeComp128"
+            theBitsFrom7seq = getBitsFrom7seqInSegmentString(segmentString, checkFakeKey)
+            checkNumOfOpp = checkNumOfTimesKeyInSegment(segmentString, getOppOfChar(theBitsFrom7seq[0:8]))
+            checkNumOfReg = checkNumOfTimesKeyInSegment(segmentString, theBitsFrom7seq[0:8])
+            checkNumOfCurrentChar = checkNumOfTimesKeyInSegment(segmentString, currentChar)
+            checkFakeKey = tempRemainder[0:7]
+            numOfCheckFakeKey = stepTwo_checkFor7seq(segmentString, checkFakeKey, my_dict, myDictOneLess)
+            tempRemainder = tempRemainder[8:]
+            # DEBUG:
+            # if (numOfCheckFakeKey == 16):
+            #     print("Same1: " + "checkNumOfReg: " + (theBitsFrom7seq[0:8]) + ": " + str(checkNumOfReg) + " checkNumOfOpp: " + getOppOfChar(theBitsFrom7seq[0:8]) + ": " + str(checkNumOfOpp) + " numOfCheckFakeKey: " + str(numOfCheckFakeKey) + " fakeKey: " + checkFakeKey + " currentChar: " + currentChar + ": " + str(checkNumOfCurrentChar))
+            # else:
+            #     print("Same2: " + "checkNumOfReg: " + (theBitsFrom7seq[0:8]) + ": " + str(checkNumOfReg) + " checkNumOfOpp: " + getOppOfChar(theBitsFrom7seq[0:8]) + ": " + str(checkNumOfOpp) + " numOfCheckFakeKey: " + str(numOfCheckFakeKey) + " fakeKey: " + checkFakeKey + " currentChar: " + currentChar + ": " + str(checkNumOfCurrentChar))
             return True
 
 def getNextBinValueFromRemainder():
@@ -878,9 +917,12 @@ def new_decompressMain(arg2):
         print("Output is " + getFileSize(outputFilename) + " bytes. Grew " + str(sizeDiff*-1) + " bytes from original.")
     print()
     #Debug:
-    #Test1: jp1.zip - 3,986,553,208 bytes - CRC32: 331EBCFA
+    #Test1: jp1.zip - 3,987,676,607 bytes - CRC32: 73E09542
     #Test2: jp2.7z - 3,989,683,717 bytes - CRC32: 69735B77
     #os.remove(outputFilename)
+
+
+
 
 
 if __name__ == '__main__':

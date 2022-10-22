@@ -1,7 +1,7 @@
 #UZ1 Lossless Compression. "Unconventional ZIP" v0.96a WIP. Authored by Jace Voracek. www.uz1.org
 #This is experimental. Not the main UZ1 algorithm. Currently just for testing
-#IPout
-#Todo: bug fixes for decompression regular scenario needed. Add recursive bit deducer
+#Todo: Bug fixes for decompression regular scenario needed. Add recursive bit deducer.
+#Needs performance optimization. May also port to golang.
 
 # Compress Notes - Abstract for each of the three segment scenarios.
 # At 126, bigChar16 turns to 7seq.
@@ -653,9 +653,10 @@ def getBitsFrom7seqInSegmentString(segmentToCheck, keyToCheck):
 def isSegmentFinished(tempRemainder, calledFrom):
     global segmentString, remainder, my_dict, myDictOneLess, numOfSixteenDetected, lastCharAfter127
     global numOfCheckFakeKey, searchingForFakeCharOr128, checkFakeKey, globalProcessType, theBitsFrom7seq, getOneMoreBit
-    global startedDecomp, firstChar, typeCompress, injectAfterThisChar
+    global startedDecomp, firstChar, typeCompress, injectAfterThisChar, bigCharSixteen
 
     currentChar = segmentString[-8:]
+    bigCharSixteen = ""
 
     if (typeCompress == False):
         currentChar = segmentString[-8:]
@@ -726,7 +727,8 @@ def isSegmentFinished(tempRemainder, calledFrom):
             sortedDictOneLess = collections.OrderedDict(sorted(myDictOneLess.items(), key=operator.itemgetter(1)))
             unusedKeyOneLessList = checkUnusedCharList(sortedDictOneLess)
             numOfSixteenDetected = stepOne_checkForSixteen(my_dict)
-            if (numOfSixteenDetected == 1):
+            checkNumOfOpp = checkNumOfTimesKeyInSegment(segmentString, getOppOfChar(bigCharSixteen))
+            if ((numOfSixteenDetected == 1) and (checkNumOfOpp >= 2)):
                 globalProcessType = "compress"
                 print("Shrink")
                 return True
@@ -920,8 +922,6 @@ def new_decompressMain(arg2):
     #Test1: jp1.zip - 3,987,676,607 bytes - CRC32: 73E09542
     #Test2: jp2.7z - 3,989,683,717 bytes - CRC32: 69735B77
     #os.remove(outputFilename)
-
-
 
 
 

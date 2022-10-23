@@ -457,7 +457,8 @@ def finishSegment():
     global segmentString, remainder, goBeforeNextSection, startedDecomp
 
     goBeforeNextSection = ""
-    startedDecomp = 1
+    #Todo: bugfix
+    #startedDecomp = 1
     binaryToWrite = segmentString + ""
     getRemainder = (len(binaryToWrite) % 8)
 

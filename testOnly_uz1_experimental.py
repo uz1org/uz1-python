@@ -4,7 +4,7 @@
 #Needs performance optimization. Might help porting to golang.
 
 # Compress Notes - Abstract for each of the three segment scenarios.
-# At 126, bigChar16 turns to 7seq.
+# At 126, bigChar16 turns to 7seq
 # (7)(1 (real)) - (7 bits)(8 bits the extra)
 # Shrinks by one bit
 #
@@ -127,10 +127,10 @@ def main():
                     print("Error: A file named " + outputFilename + " already exists. Exiting...")
                 else:
                     if (doMaxIteration == True):
-                        #decompressMax(arg2)
+                        decompressMax(arg2)
                         print("Decompress functionality currently disabled in WIP version.")
                     else:
-                        #new_decompressMain(arg2)
+                        new_decompressMain(arg2)
                         print("Decompress functionality currently disabled in WIP version.")
         else:
             printHelp()
@@ -146,7 +146,7 @@ getLimitOneLess = ((2**(bitSize-1))-2) #126
 numOfBitsNeededToCompress = 32 #arbitrary
 numOfChars = numOfLargestKey = numOfCheckFakeKey = searchingForFakeCharOr128 = startedDecomp = dirtyNumOfRemBinLength = 0
 segmentString = remainder = largestKey = unusedKeyOneLess = goBeforeNextSection = inputFileSize = getDecompLargeChar = globalProcessType = theBitsFrom7seq = lastCharAfter127 = firstChar = injectAfterThisChar = ""
-alertedForUncompressedDataBlock = stillNeedBytes = typeCompress = getOneMoreBit = dirtyFix_afterFirstSeg = checkedFirstInDict = checkedSecondInDict = checkedThirdInDict = checkedFourthInDict = False
+alertedForUncompressedDataBlock = stillNeedBytes = typeCompress = getOneMoreBit = dirtyFix_afterFirstSeg = checkedFirstInDict = checkedSecondInDict = checkedThirdInDict = checkedFourthInDict = haveAlreadyChecked126 = False
 
 
 #Common vars for decompression
@@ -278,36 +278,28 @@ def getValuesForComp():
 
     if (typeCompress == True):
         if (globalProcessType == "compress"):
-            #print("Running compress")
             realCompSixteen()
             numOfSixteenDetected = 0
         elif (globalProcessType == "fakeComp7seq"): #ying yang method
-            #print("Running fakeComp7seq")
             fakeComp7seq()
         elif (globalProcessType == "fakeComp128"):
-            #print("Running fakeComp128")
             fakeComp128()
         else:
-            #print("Running regular")
             regularFake()
     else:
         if (globalProcessType == "realKey"):
             decompReal()
         elif (globalProcessType == "fakeKey128_1"):
-            #print("running fakeKey128_1")
             #128 stays as 128
             injectCharAfterThis(injectAfterThisChar, (firstChar[1:8] + "1"))
             injectAfterThisChar = ""
         elif (globalProcessType == "fakeKey128_0"):
-            #print("running fakeKey128_0")
             #7seq turns back to 128
             injectCharAfterThis(injectAfterThisChar, (firstChar[1:8] + "0"))
             injectAfterThisChar = ""
         elif (globalProcessType == "fakeKey7seq"):
-            #print("running fakeKey7seq")
             fakeKey7seq()
         elif (globalProcessType == "decompRegular"):
-            #print("running regular")
             #Todo: Clean this
             if (dirtyFix_afterFirstSeg == False):
                 segmentString += firstChar
@@ -442,6 +434,18 @@ def checkNumOfTimesKeyInSegment(segmentToCheck, keyToCheck):
     return tempNumOfKeysFound
 
 
+def checkNumOfItemsOneLessInSegment(segmentToCheck):
+    tempDict = {}
+    for i in range(0, len(segmentToCheck), bitSize):
+        key = segmentToCheck[i:i+(bitSize-1)]
+        if key in tempDict:
+            tempDict[key] = (tempDict.get(key) + 1)
+        else:
+            tempDict[key] = 1
+    #print("Unused chars in checkNumOfItemsOneLessInSegment: " + str(checkUnusedCharList(tempDict)))
+    return len(tempDict)
+
+
 def getOppOfChar(charToCheck):
     if (charToCheck[-1:] == "1"):
         oppChar = charToCheck[:-1] + "0"
@@ -476,7 +480,7 @@ def realComp():
 
 
 def finishSegment():
-    global segmentString, remainder, goBeforeNextSection, startedDecomp
+    global segmentString, remainder, goBeforeNextSection, startedDecomp, haveAlreadyChecked126
 
     goBeforeNextSection = ""
     if (runningCompress == False):
@@ -489,6 +493,7 @@ def finishSegment():
         binaryToWrite = binaryToWrite[:-getRemainder]
 
     writeToFile(binascii.unhexlify(bin2hex(binaryToWrite)))
+    haveAlreadyChecked126 = False
     segmentString = ""
 
 
@@ -530,7 +535,6 @@ def comp_processEndOfFileUnfinished():
     global segmentString, remainder, goBeforeNextSection, dirtyNumOfRemBinLength
 
     segmentString = goBeforeNextSection + segmentString + remainder
-
     while (len(segmentString) % 8 != 0):
         segmentString += "0"
     #Todo: clean this bugfix
@@ -539,8 +543,8 @@ def comp_processEndOfFileUnfinished():
     else:
         contentToWrite = segmentString
     #Todo: Also clean this supernatural bug
-    if ((dirtyNumOfRemBinLength >= 8) and (segmentString[-8:] == "00000000")):
-        contentToWrite = contentToWrite[:-8]
+    # if ((dirtyNumOfRemBinLength >= 8) and (segmentString[-8:] == "00000000")):
+    #     contentToWrite = contentToWrite[:-8]
     writeToFile(binascii.unhexlify(bin2hex(contentToWrite)))
 
 
@@ -615,8 +619,7 @@ def addToDict(key):
     if key != None:
         #Add to regular dict
         if key in my_dict:
-            val = my_dict.get(key)
-            my_dict[key] = (val + 1)
+            my_dict[key] = (my_dict.get(key) + 1)
         else:
             my_dict[key] = 1
         numOfChars = numOfChars + 1
@@ -624,17 +627,15 @@ def addToDict(key):
         #Add to oneLess dict
         key = key[:-1]
         if key in myDictOneLess:
-            val = myDictOneLess.get(key)
-            myDictOneLess[key] = (val + 1)
+            myDictOneLess[key] = (myDictOneLess.get(key) + 1)
         else:
             myDictOneLess[key] = 1
-
 
 
 def isSegmentFinished(tempRemainder):
     global segmentString, remainder, my_dict, myDictOneLess, numOfSixteenDetected, lastCharAfter127
     global numOfCheckFakeKey, searchingForFakeCharOr128, checkFakeKey, globalProcessType, theBitsFrom7seq, getOneMoreBit
-    global startedDecomp, firstChar, typeCompress, injectAfterThisChar, bigCharSixteen
+    global startedDecomp, firstChar, typeCompress, injectAfterThisChar, bigCharSixteen, haveAlreadyChecked126
 
     currentChar = segmentString[-8:]
     bigCharSixteen = ""
@@ -662,6 +663,7 @@ def isSegmentFinished(tempRemainder):
             if (numOfKeys == 16):
                 theBitsFrom7seq = getBitsFrom7seqInSegmentString(segmentString, key)
                 numOfTimes = checkNumOfTimesKeyInSegment(segmentString, theBitsFrom7seq[0:8])
+
                 if ((numOfTimes == 0) and (bitType == "1")):
                     globalProcessType = "realKey"
                     return True
@@ -704,15 +706,15 @@ def isSegmentFinished(tempRemainder):
     else:
         lastCharAfter127 = tempRemainder[0:8]
         #Step 1. Check if the number of chars is equal to 126
-        if (len(myDictOneLess.items()) == 126):
+        if ((len(myDictOneLess.items()) == 126) and (haveAlreadyChecked126 == False)):
             sortedDictOneLess = collections.OrderedDict(sorted(myDictOneLess.items(), key=operator.itemgetter(1)))
             unusedKeyOneLessList = checkUnusedCharList(sortedDictOneLess)
             numOfSixteenDetected = stepOne_checkForSixteen(my_dict)
             checkNumOfOpp = checkNumOfTimesKeyInSegment(segmentString, getOppOfChar(bigCharSixteen))
             if ((numOfSixteenDetected == 1) and (checkNumOfOpp >= neededGetOpp)):
                 globalProcessType = "compress"
-                print("Shrink scenario: " + bigCharSixteen + ": " + str(numOfSixteenDetected))
                 return True
+            haveAlreadyChecked126 = True
             #If there are not fifteen, need to go to 127
             #Need to go to 127 before this step...
             #Step 2: Check for 7seq remainder
@@ -945,8 +947,6 @@ def new_decompressMain(arg2):
     #Test1: jp1.zip - 3,987,676,607 bytes - CRC32: 73E09542
     #Test2: jp2.7z - 3,989,683,717 bytes - CRC32: 69735B77
     #os.remove(outputFilename)
-
-
 
 if __name__ == '__main__':
     main()

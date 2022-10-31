@@ -368,7 +368,7 @@ def fakeComp128():
     fullKey = lastCharAfter127
     lastChar128 = segmentString[-8:]
     lastBitOflastChar128 = lastChar128[-1:]
-    segmentString = segmentString[:-8]
+    #segmentString = segmentString[:-8] #Todo
 
     if (fullKey[-1:] == "0"):
         #0 uses 7seq
@@ -383,7 +383,7 @@ def fakeComp128():
 
 
 def regularFake():
-    global remainder, tempRemainder, segmentString, goBeforeNextSection, lastCharAfter127
+    global remainder, segmentString, goBeforeNextSection, lastCharAfter127
     remainder = remainder[8:]
     segmentString = goBeforeNextSection + lastCharAfter127 + segmentString
 
